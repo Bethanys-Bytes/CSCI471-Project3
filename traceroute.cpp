@@ -26,19 +26,19 @@ int main (int argc, char *argv[]) {
   // * Process the command line arguments
   // ********************************************************************
   int opt = 0;
-  while ((opt = getopt(argc,argv,"d:v:")) != -1) {
+  while ((opt = getopt(argc,argv,"t:d:")) != -1) {
 
     switch (opt) {
-    case 'd':
+    case 't':
       destIP = optarg;
       break;
-    case 'v':
+    case 'd':
       LOG_LEVEL = atoi(optarg);;
       break;
     case ':':
     case '?':
     default:
-      std::cout << "useage: " << argv[0] << " -d [destination ip] -v [Log Level]" << std::endl;
+      std::cout << "useage: " << argv[0] << " -t [target ip] -d [Debug Level]" << std::endl;
       exit(-1);
     }
   }
