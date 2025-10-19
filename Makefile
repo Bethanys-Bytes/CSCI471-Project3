@@ -6,6 +6,8 @@
 #  Copyright 2012 Colorado School of Mines. All rights reserved.
 #
 
+USERNAME = change-me
+
 CXX = g++
 LD = g++
 CXXFLAGS = -g3 -std=c++17
@@ -38,8 +40,11 @@ clean:
 #
 # This might work to create the submission tarball in the formal I asked for.
 #
+#
+# This might work to create the submission tarball in the formal I asked for.
+#
 submit:
-	rm -f core ${TARGET} ${OBJ_FILES}
-	mkdir `whoami`
-	cp Makefile README.txt *.h *.cpp `whoami`
-	echo Change the name of the directory to your real username, not seed!
+        rm -f core project1 ${OBJ_FILES}
+        mkdir ${USERNAME}
+        cp Makefile README.txt *.h *.cpp ${USERNAME}
+        tar zcf ${USERNAME}.tgz ${USERNAME}
