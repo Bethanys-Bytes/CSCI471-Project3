@@ -123,40 +123,39 @@ int main (int argc, char *argv[]) {
 			tv.tv_sec = 5; 
 			tv.tv_usec = 0;
 			int ready = select(recvSock + 1, &readfds, NULL, NULL, &tv);
+
 			if (ready < 0) {
 				DEBUG << "error with select()" << ENDL;
 			}
 
 		// ii. If data has arrived, read it with recevfrom()
-		  if (ready > 0 && FD_ISSET(recvSock, &readfds)) {
-        struct sockaddr_in recvAddr;
-        socklen_t addrlen = sizeof(recvAddr);
-        ssize_t recv_bytes = recvfrom(recvSock, recvBuffer, sizeof(recvBuffer), 0, (struct sockaddr *)&recvAddr, &addrlen);
-        if (recv_bytes > 0) {
-					struct iphdr *recv_ip = (struct iphdr *)recvBuffer;
-					struct icmphdr *recv_icmp = (struct icmphdr *)(recvBuffer + recv_ip->ihl*4);
-					
-					// 1. If received data is Echo Reply from the destination
-					if (recv_icmp->type == ICMP_ECHOREPLY) {
-						// a. Print message
-							char ip_str[INET_ADDRSTRLEN];
-							inet_ntop(AF_INET, &(recv_ip->saddr), ip_str, INET_ADDRSTRLEN);
-							std::cout << "Reply received from " << ip_str << "\n";
-						// b. Set reply-not-received to false
-							no_reply = false;
-						// c. Set not-done-reading to false
-							not_done_reading = false;
+			struct sockaddr_in recvAddr;
+			socklen_t addrlen = sizeof(recvAddr);
+			ssize_t recv_bytes = recvfrom(recvSock, recvBuffer, sizeof(recvBuffer), 0, (struct sockaddr *)&recvAddr, &addrlen);
+			if (recv_bytes > 0) {
+				struct iphdr *recv_ip = (struct iphdr *)recvBuffer;
+				struct icmphdr *recv_icmp = (struct icmphdr *)(recvBuffer + recv_ip->ihl*4);
+				
+				// 1. If received data is Echo Reply from the destination
+				if (recv_icmp->type == ICMP_ECHOREPLY) {
+					// a. Print message
+						char ip_str[INET_ADDRSTRLEN];
+						inet_ntop(AF_INET, &(recv_ip->saddr), ip_str, INET_ADDRSTRLEN);
+						std::cout << "Reply received from " << ip_str << "\n";
+					// b. Set reply-not-received to false
+						no_reply = false;
+					// c. Set not-done-reading to false
+						not_done_reading = false;
 
-					// 2. If received data is TTL Time Exceeded; TTL
-					} else if (recv_icmp->type == ICMP_TIME_EXCEEDED) {
-						//check if subtype is 0???
-						// a. print message
-						std::cout << "Time to live of " << ip->ttl << " had been exceeded.\n";
-						// b. Set not-done-reading to false
-							not_done_reading = false;
-					}
-        }
-    	}
+				// 2. If received data is TTL Time Exceeded; TTL
+				} else if (recv_icmp->type == ICMP_TIME_EXCEEDED) {
+					//check if subtype is 0???
+					// a. print message
+					std::cout << "Time to live of " << ip->ttl << " had been exceeded.\n";
+					// b. Set not-done-reading to false
+						not_done_reading = false;
+				}
+			}
 
 			gettimeofday(&now, NULL);
 		}
