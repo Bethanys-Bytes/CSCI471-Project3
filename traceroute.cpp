@@ -81,7 +81,14 @@ int main (int argc, char *argv[]) {
 	int sendSock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 	if (sendSock < 0) {
 		DEBUG << "problem creating send socket" << ENDL;
-		perror("sendSock");  // "Operation not permitted"
+		perror("sendSock");  // "Operation not permitted" error --> run with sudo
+		return -1;
+	}
+
+	// tell socket to use my IP header
+	int one = 1;
+	if (setsockopt(sendSock, IPPROTO_IP, IP_HDRINCL, &one, sizeof(one)) < 0) {
+		DEBUG << "couldn't override socket" << ENDL;
 		return -1;
 	}
 
