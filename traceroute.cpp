@@ -68,6 +68,8 @@ int main (int argc, char *argv[]) {
 	ip->frag_off = 0;
 	ip->protocol = IPPROTO_ICMP;
 	ip->daddr = inet_addr(destIP.c_str());
+	ip->check = 0;
+	ip->saddr = 0;
 
 // 4. Fill in all the fields of the ICMP header right behind the IP header.
 	struct icmphdr *icmp = (struct icmphdr *)(sendBuffer + sizeof(struct iphdr));
