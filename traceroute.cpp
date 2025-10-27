@@ -116,6 +116,8 @@ int main (int argc, char *argv[]) {
 		ssize_t sent_bytes = sendto(sendSock, sendBuffer, sizeof(sendBuffer), 0, (struct sockaddr *)&destAddr, sizeof(destAddr));
 		if (sent_bytes < 0) {
 			DEBUG << "send from socket failed" << ENDL;
+			perror("sendSock");
+			return -1;
 		}
 	// d. While (now < START_TIME + 15) and (not-done-reading)
 	struct timeval start, now;
@@ -160,7 +162,7 @@ int main (int argc, char *argv[]) {
 				} else if (recv_icmp->type == ICMP_TIME_EXCEEDED) {
 					//check if subtype is 0???
 					// a. print message
-					std::cout << "Time to live of " << ip->ttl << " had been exceeded.\n";
+					std::cout << "No response with a TTL of " << ip->ttl << "\n";
 					// b. Set not-done-reading to false
 						not_done_reading = false;
 				}
