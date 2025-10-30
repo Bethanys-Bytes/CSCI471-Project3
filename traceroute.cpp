@@ -1,6 +1,10 @@
 #include "traceroute.h"
 #include <sys/time.h>
 
+const int IP_HEADER_END = 20;
+const int ICMP_HEADER_END = 28;
+const int PACKET_SIZE = 64;
+
 // ****************************************************************************
 // * Compute the Internet Checksum over an arbitrary buffer.
 // * (written with the help of ChatGPT 3.5)
@@ -25,31 +29,32 @@ bool isValidIpAddress(const char *ipAddress) {
 	return result != 0;
 }
 
-void fill_in_IP_header(char *sendBuffer, int current_ttl, std::string destIP) {
+struct iphdr* fill_in_IP_header(int current_ttl, std::string destIP) {
 // 3. Fill in all the fields of the IP header at the front of the buffer.
 	// a. You don’t need to fill in source IP or checksum
-	struct iphdr *ip = (struct iphdr *)sendBuffer;
+	struct iphdr *ip;
+	DEBUG << "Size of IP: " << sizeof(struct iphdr) << ENDL;
 	ip->version = 4;
 	ip->ihl = 5;
 	ip->tos = 0;
-	ip->tot_len = htons(sizeof(struct iphdr) + sizeof(struct icmphdr));
+	ip->tot_len = htons(PACKET_SIZE);
 	ip->id = htons(0);
 	ip->frag_off = 0;
 	ip->protocol = IPPROTO_ICMP;
 	ip->daddr = inet_addr(destIP.c_str());
 	ip->ttl = current_ttl;
-	ip->check = checksum((unsigned short *)ip, sizeof(struct iphdr));
-	ip->saddr = 0;
+	return ip;
 }
 
-void fill_in_ICMP_header(char *sendBuffer) {
+struct icmphdr* fill_in_ICMP_header() {
 // 4. Fill in all the fields of the ICMP header right behind the IP header.
-	struct icmphdr *icmp = (struct icmphdr *)(sendBuffer + sizeof(struct iphdr));
+	struct icmphdr *icmp;
+	DEBUG << "Size of ICMP: " << sizeof(struct icmphdr) << ENDL;
 	icmp->type = ICMP_ECHO;
 	icmp->code = 0;
 	icmp->un.echo.id = htons(getpid() & 0xFFFF);
 	icmp->un.echo.sequence = htons(1);
-	icmp->checksum = checksum((unsigned short *)icmp, sizeof(struct icmphdr));
+	return icmp;
 }
 
 
@@ -89,10 +94,6 @@ int main (int argc, char *argv[]) {
 		return -1;
 	}
 
-	//Idk what is going on here. seems like when I uncomment this once the code is already running, the code works. search me.
-	// int one = 1;
-	// setsockopt(sendSock, IPPROTO_IP, IP_HDRINCL, &one, sizeof(one));
-
 	int recvSock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 	if (recvSock < 0) {
 		DEBUG << "problem creating recv socket" << ENDL;
@@ -112,9 +113,17 @@ int main (int argc, char *argv[]) {
 		std::memset(recvBuffer, 'a', sizeof(recvBuffer));
 
 	// a. Set the TTL in the IP header in the buffer to CURRENT_TTL
-		fill_in_IP_header(sendBuffer, current_ttl, destIP);
+		struct iphdr *ip_header = fill_in_IP_header(current_ttl, destIP);
+		memcpy(sendBuffer, ip_header, IP_HEADER_END);
 	// b. Set the checksum in the ICMP header
-		fill_in_ICMP_header(sendBuffer);
+		struct icmphdr *icmp_header = fill_in_ICMP_header();
+		memcpy(&sendBuffer[20], icmp_header, ICMP_HEADER_END - IP_HEADER_END);
+		icmp_header->checksum = checksum((unsigned short *)sendBuffer, PACKET_SIZE);
+		memcpy(&sendBuffer[20], icmp_header, ICMP_HEADER_END - IP_HEADER_END);
+
+		DEBUG << "Buffer is " << sendBuffer << ENDL;
+
+
 
 	// c. Send the buffer using sendfrom()
 		struct sockaddr_in destAddr{};
@@ -153,7 +162,7 @@ int main (int argc, char *argv[]) {
 			tv.tv_usec = 0;
 
 			int ready = select(recvSock + 1, &readfds, NULL, NULL, &tv);
-
+			DEBUG << "Return val of select: " << ready << ENDL;
 			if (!(ready > 0)) {
 					continue;
 			}
@@ -167,16 +176,18 @@ int main (int argc, char *argv[]) {
 			DEBUG << "Data received " << recv_bytes << " bytes." << ENDL;
 			if (recv_bytes > 0) {
 				struct iphdr *recv_ip = (struct iphdr *)recvBuffer;
-				struct icmphdr *recv_icmp = (struct icmphdr *)(recvBuffer + recv_ip->ihl * 4);
+				struct icmphdr *recv_icmp = (struct icmphdr *)(recvBuffer + recv_ip->ihl);
 
 				DEBUG << "Buffer: " << recvBuffer << ENDL;
 				DEBUG << "ICMP code: " << recv_icmp->code << ENDL;
 				DEBUG << "ICMP check: " << recv_icmp->checksum << ENDL;
 				DEBUG << "ICMP buffer: " << recvBuffer[recv_ip->ihl * 4] << ENDL;
 				DEBUG << "Reply type: " << recv_icmp->type << ENDL;
-				// problem with the reply type being empty 
+				// problem with the reply type being empty
+	
 				char ip_str[INET_ADDRSTRLEN];
 				inet_ntop(AF_INET, &(recv_ip->saddr), ip_str, INET_ADDRSTRLEN);
+								
 				DEBUG << "IP: " << ip_str << ENDL;
 				if (recv_icmp->type == ICMP_ECHOREPLY) {
 					std::cout << "Reply and answered!" << "\n";
