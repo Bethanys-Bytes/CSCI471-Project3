@@ -78,7 +78,8 @@ int main (int argc, char *argv[]) {
   }
 
 	if (isValidIpAddress(destIP.c_str()) < 0) {
-		std::cout << "Invalid" << std::endl;
+		std::cout << "Invalid IP address." << std::endl;
+		return -1;
 	}
 
 // 5. Create the send and receive sockets.
@@ -88,6 +89,7 @@ int main (int argc, char *argv[]) {
 		return -1;
 	}
 
+	//Idk what is going on here. seems like when I uncomment this once the code is already running, the code works. search me.
 	// int one = 1;
 	// setsockopt(sendSock, IPPROTO_IP, IP_HDRINCL, &one, sizeof(one));
 
@@ -108,10 +110,12 @@ int main (int argc, char *argv[]) {
 	// 2. Fill the whole buffer with a pattern of characters of your choice.
 		std::memset(sendBuffer, 'a', sizeof(sendBuffer));
 		std::memset(recvBuffer, 'a', sizeof(recvBuffer));
+
 	// a. Set the TTL in the IP header in the buffer to CURRENT_TTL
 		fill_in_IP_header(sendBuffer, current_ttl, destIP);
 	// b. Set the checksum in the ICMP header
 		fill_in_ICMP_header(sendBuffer);
+
 	// c. Send the buffer using sendfrom()
 		struct sockaddr_in destAddr{};
 		destAddr.sin_family = AF_INET;
@@ -155,12 +159,12 @@ int main (int argc, char *argv[]) {
 			}
 
 		// ii. If data has arrived, read it with recvfrom()
-			DEBUG << "Data is arriving" << ENDL;
+			DEBUG << "Data is arriving..." << ENDL;
 			struct sockaddr_in recvAddr;
 			socklen_t addrlen = sizeof(recvAddr);
 			ssize_t recv_bytes = recvfrom(recvSock, recvBuffer, sizeof(recvBuffer), 0, (struct sockaddr *)&recvAddr, &addrlen);
 
-			DEBUG << "Data received " << recv_bytes << " bytes" << ENDL;
+			DEBUG << "Data received " << recv_bytes << " bytes." << ENDL;
 			if (recv_bytes > 0) {
 				struct iphdr *recv_ip = (struct iphdr *)recvBuffer;
 				struct icmphdr *recv_icmp = (struct icmphdr *)(recvBuffer + recv_ip->ihl * 4);
@@ -168,7 +172,7 @@ int main (int argc, char *argv[]) {
 				DEBUG << "Buffer: " << recvBuffer << ENDL;
 				DEBUG << "ICMP code: " << recv_icmp->code << ENDL;
 				DEBUG << "ICMP check: " << recv_icmp->checksum << ENDL;
-				DEBUG << "ICMP buffer: " << recvBuffer[20] << ENDL;
+				DEBUG << "ICMP buffer: " << recvBuffer[recv_ip->ihl * 4] << ENDL;
 				DEBUG << "Reply type: " << recv_icmp->type << ENDL;
 				// problem with the reply type being empty 
 				char ip_str[INET_ADDRSTRLEN];

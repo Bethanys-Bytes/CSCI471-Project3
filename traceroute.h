@@ -23,5 +23,8 @@ inline int LOG_LEVEL = 0;
 #define ENDL  " (" << __FILE__ << ":" << __LINE__ << ")" << std::endl; }
 
 uint16_t checksum(unsigned short *buffer, int size);
+bool isValidIpAddress(const char *ipAddress);
+void fill_in_IP_header(char *sendBuffer, int current_ttl, std::string destIP);
+void fill_in_ICMP_header(char *sendBuffer);
 
 #endif
