@@ -39,7 +39,7 @@ struct iphdr* fill_in_IP_header(char *sendBuffer, int current_ttl, std::string d
 	ip->tot_len = htons(PACKET_SIZE);
 	ip->id = htons(0);
 	ip->frag_off = 0;
-	ip->ttl = current_ttl;
+	ip->ttl = htons(current_ttl);
 	ip->protocol = IPPROTO_ICMP;
 	ip->check = 0;
 	ip->daddr = inet_addr(destIP.c_str());
@@ -48,11 +48,11 @@ struct iphdr* fill_in_IP_header(char *sendBuffer, int current_ttl, std::string d
 
 struct icmphdr* fill_in_ICMP_header(char *sendBuffer) {
 // 4. Fill in all the fields of the ICMP header right behind the IP header.
-	struct icmphdr *icmp = (struct icmphdr *)(sendBuffer + sizeof(struct iphdr));
-	icmp->type = ICMP_ECHO;
+	struct icmphdr *icmp = (struct icmphdr *)(sendBuffer); // + IP_HEADER_END);
+	icmp->type = htons(ICMP_ECHO);
 	icmp->code = 0;
 	icmp->checksum = 0;
-	icmp->un.echo.id = htons(getpid() & 0xFFFF);
+	icmp->un.echo.id = 0; //htons(getpid() & 0xFFFF);
 	icmp->un.echo.sequence = htons(1);
 	return icmp;
 }
@@ -116,10 +116,7 @@ int main (int argc, char *argv[]) {
 		struct iphdr *ip_header = fill_in_IP_header(sendBuffer, current_ttl, destIP);
 		struct icmphdr *icmp_header = fill_in_ICMP_header(sendBuffer);
 	// b. Set the checksum in the ICMP header
-		icmp_header->checksum = checksum((unsigned short *)icmp_header, PACKET_SIZE - sizeof(struct iphdr));
-
-		DEBUG << "Buffer is " << sendBuffer << ENDL;
-
+		icmp_header->checksum = checksum((unsigned short *)sendBuffer, PACKET_SIZE);
 
 
 	// c. Send the buffer using sendfrom()
@@ -159,7 +156,6 @@ int main (int argc, char *argv[]) {
 			tv.tv_usec = 0;
 
 			int ready = select(recvSock + 1, &readfds, NULL, NULL, &tv);
-			DEBUG << "Return val of select: " << ready << ENDL;
 			if (!(ready > 0)) {
 					continue;
 			}
