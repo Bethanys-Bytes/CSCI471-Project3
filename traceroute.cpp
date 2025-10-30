@@ -32,13 +32,13 @@ void fill_in_IP_header(char *sendBuffer, int current_ttl, std::string destIP) {
 	ip->version = 4;
 	ip->ihl = 5;
 	ip->tos = 0;
-	ip->tot_len = htons(sizeof(sendBuffer));
+	ip->tot_len = htons(sizeof(struct iphdr) + sizeof(struct icmphdr));
 	ip->id = htons(0);
 	ip->frag_off = 0;
 	ip->protocol = IPPROTO_ICMP;
 	ip->daddr = inet_addr(destIP.c_str());
 	ip->ttl = current_ttl;
-	ip->check = 0;
+	ip->check = checksum((unsigned short *)ip, sizeof(struct iphdr));
 	ip->saddr = 0;
 }
 
@@ -139,7 +139,7 @@ int main (int argc, char *argv[]) {
 			double elapsed = (now.tv_sec - start.tv_sec) + (now.tv_usec - start.tv_usec) / 1e6;
 
 			if (elapsed >= 15.0) {
-				DEBUG << "Time exceeded 15 seconds. Increasing TTL." << ENDL;
+				std::cout << "No response with a TTL of " << current_ttl << "\n";
 				break;
 			}
 
@@ -179,10 +179,10 @@ int main (int argc, char *argv[]) {
 				inet_ntop(AF_INET, &(recv_ip->saddr), ip_str, INET_ADDRSTRLEN);
 				DEBUG << "IP: " << ip_str << ENDL;
 				if (recv_icmp->type == ICMP_ECHOREPLY) {
-					std::cout << "Reply received from " << ip_str << "\n";
+					std::cout << "Reply and answered!" << "\n";
 					not_done_reading = false;
 				} else if (recv_icmp->type == ICMP_TIME_EXCEEDED) {
-					std::cout << "No response with a TTL of " << current_ttl << "\n";
+					std::cout << "Timeout received from " << ip_str << "\n";
 					not_done_reading = false;
 				}
 			} else {
