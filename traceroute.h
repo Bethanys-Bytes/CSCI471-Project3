@@ -24,7 +24,7 @@ inline int LOG_LEVEL = 0;
 
 uint16_t checksum(unsigned short *buffer, int size);
 bool isValidIpAddress(const char *ipAddress);
-struct iphdr fill_in_IP_header(char *sendBuffer, int current_ttl, std::string destIP);
-struct icmphdr fill_in_ICMP_header(char *sendBuffer);
+struct iphdr* fill_in_IP_header(char *sendBuffer, int current_ttl, std::string destIP);
+struct icmphdr* fill_in_ICMP_header(char *sendBuffer);
 
 #endif

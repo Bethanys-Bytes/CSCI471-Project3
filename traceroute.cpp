@@ -29,29 +29,29 @@ bool isValidIpAddress(const char *ipAddress) {
 	return result != 0;
 }
 
-struct iphdr* fill_in_IP_header(int current_ttl, std::string destIP) {
+struct iphdr* fill_in_IP_header(char *sendBuffer, int current_ttl, std::string destIP) {
 // 3. Fill in all the fields of the IP header at the front of the buffer.
 	// a. You don’t need to fill in source IP or checksum
-	struct iphdr *ip;
-	DEBUG << "Size of IP: " << sizeof(struct iphdr) << ENDL;
+	struct iphdr *ip = (struct iphdr *)sendBuffer;
 	ip->version = 4;
 	ip->ihl = 5;
 	ip->tos = 0;
 	ip->tot_len = htons(PACKET_SIZE);
 	ip->id = htons(0);
 	ip->frag_off = 0;
-	ip->protocol = IPPROTO_ICMP;
-	ip->daddr = inet_addr(destIP.c_str());
 	ip->ttl = current_ttl;
+	ip->protocol = IPPROTO_ICMP;
+	ip->check = 0;
+	ip->daddr = inet_addr(destIP.c_str());
 	return ip;
 }
 
-struct icmphdr* fill_in_ICMP_header() {
+struct icmphdr* fill_in_ICMP_header(char *sendBuffer) {
 // 4. Fill in all the fields of the ICMP header right behind the IP header.
-	struct icmphdr *icmp;
-	DEBUG << "Size of ICMP: " << sizeof(struct icmphdr) << ENDL;
+	struct icmphdr *icmp = (struct icmphdr *)(sendBuffer + sizeof(struct iphdr));
 	icmp->type = ICMP_ECHO;
 	icmp->code = 0;
+	icmp->checksum = 0;
 	icmp->un.echo.id = htons(getpid() & 0xFFFF);
 	icmp->un.echo.sequence = htons(1);
 	return icmp;
@@ -105,21 +105,18 @@ int main (int argc, char *argv[]) {
 // 6. while (CURRENT_TTL <= 31) and (reply-not-received)
 	while (current_ttl <= 31 && no_reply) {
 	// 1. Allocate two 64 byte buffers. One for sending and one for receiving.
-		char sendBuffer[64];
-		char recvBuffer[64];
+		char sendBuffer[PACKET_SIZE];
+		char recvBuffer[PACKET_SIZE];
 
 	// 2. Fill the whole buffer with a pattern of characters of your choice.
 		std::memset(sendBuffer, 'a', sizeof(sendBuffer));
 		std::memset(recvBuffer, 'a', sizeof(recvBuffer));
 
 	// a. Set the TTL in the IP header in the buffer to CURRENT_TTL
-		struct iphdr *ip_header = fill_in_IP_header(current_ttl, destIP);
-		memcpy(sendBuffer, ip_header, IP_HEADER_END);
+		struct iphdr *ip_header = fill_in_IP_header(sendBuffer, current_ttl, destIP);
+		struct icmphdr *icmp_header = fill_in_ICMP_header(sendBuffer);
 	// b. Set the checksum in the ICMP header
-		struct icmphdr *icmp_header = fill_in_ICMP_header();
-		memcpy(&sendBuffer[20], icmp_header, ICMP_HEADER_END - IP_HEADER_END);
-		icmp_header->checksum = checksum((unsigned short *)sendBuffer, PACKET_SIZE);
-		memcpy(&sendBuffer[20], icmp_header, ICMP_HEADER_END - IP_HEADER_END);
+		icmp_header->checksum = checksum((unsigned short *)icmp_header, PACKET_SIZE - sizeof(struct iphdr));
 
 		DEBUG << "Buffer is " << sendBuffer << ENDL;
 
