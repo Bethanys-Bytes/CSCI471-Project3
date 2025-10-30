@@ -29,30 +29,30 @@ bool isValidIpAddress(const char *ipAddress) {
 	return result != 0;
 }
 
-struct iphdr* fill_in_IP_header(char *sendBuffer, int current_ttl, std::string destIP) {
-// 3. Fill in all the fields of the IP header at the front of the buffer.
-	// a. You don’t need to fill in source IP or checksum
-	struct iphdr *ip = (struct iphdr *)sendBuffer;
-	ip->version = 4;
-	ip->ihl = 5;
-	ip->tos = 0;
-	ip->tot_len = htons(PACKET_SIZE);
-	ip->id = htons(0);
-	ip->frag_off = 0;
-	ip->ttl = htons(current_ttl);
-	ip->protocol = IPPROTO_ICMP;
-	ip->check = 0;
-	ip->daddr = inet_addr(destIP.c_str());
-	return ip;
-}
+// struct iphdr* fill_in_IP_header(char *sendBuffer, int current_ttl, std::string destIP) {
+// // 3. Fill in all the fields of the IP header at the front of the buffer.
+// 	// a. You don’t need to fill in source IP or checksum
+// 	struct iphdr *ip = (struct iphdr *)sendBuffer;
+// 	ip->version = 4;
+// 	ip->ihl = 5;
+// 	ip->tos = 0;
+// 	ip->tot_len = htons(PACKET_SIZE);
+// 	ip->id = htons(0);
+// 	ip->frag_off = 0;
+// 	ip->ttl = htons(current_ttl);
+// 	ip->protocol = IPPROTO_ICMP;
+// 	ip->check = 0;
+// 	ip->daddr = inet_addr(destIP.c_str());
+// 	return ip;
+// }
 
 struct icmphdr* fill_in_ICMP_header(char *sendBuffer) {
 // 4. Fill in all the fields of the ICMP header right behind the IP header.
-	struct icmphdr *icmp = (struct icmphdr *)(sendBuffer); // + IP_HEADER_END);
+	struct icmphdr *icmp = (struct icmphdr *)(sendBuffer);
 	icmp->type = htons(ICMP_ECHO);
 	icmp->code = 0;
 	icmp->checksum = 0;
-	icmp->un.echo.id = 0; //htons(getpid() & 0xFFFF);
+	icmp->un.echo.id = htons(getpid() & 0xFFFF);
 	icmp->un.echo.sequence = htons(1);
 	return icmp;
 }
@@ -113,11 +113,13 @@ int main (int argc, char *argv[]) {
 		std::memset(recvBuffer, 'a', sizeof(recvBuffer));
 
 	// a. Set the TTL in the IP header in the buffer to CURRENT_TTL
-		struct iphdr *ip_header = fill_in_IP_header(sendBuffer, current_ttl, destIP);
+		//struct iphdr *ip_header = fill_in_IP_header(sendBuffer, current_ttl, destIP);
 		struct icmphdr *icmp_header = fill_in_ICMP_header(sendBuffer);
+		*sendBuffer = 8; // ICMP header starts at the beginning of the buffer -> why don't I have control over the IP header?
 	// b. Set the checksum in the ICMP header
 		icmp_header->checksum = checksum((unsigned short *)sendBuffer, PACKET_SIZE);
 
+		setsockopt(sendSock, IPPROTO_IP, IP_TTL, &current_ttl, sizeof(current_ttl));
 
 	// c. Send the buffer using sendfrom()
 		struct sockaddr_in destAddr{};
@@ -161,31 +163,28 @@ int main (int argc, char *argv[]) {
 			}
 
 		// ii. If data has arrived, read it with recvfrom()
-			DEBUG << "Data is arriving..." << ENDL;
-			struct sockaddr_in recvAddr;
+			struct sockaddr_in recvAddr[64];
 			socklen_t addrlen = sizeof(recvAddr);
 			ssize_t recv_bytes = recvfrom(recvSock, recvBuffer, sizeof(recvBuffer), 0, (struct sockaddr *)&recvAddr, &addrlen);
+			//recv buffer is not far enough back
 
 			DEBUG << "Data received " << recv_bytes << " bytes." << ENDL;
 			if (recv_bytes > 0) {
 				struct iphdr *recv_ip = (struct iphdr *)recvBuffer;
-				struct icmphdr *recv_icmp = (struct icmphdr *)(recvBuffer + recv_ip->ihl);
+				struct icmphdr *recv_icmp = (struct icmphdr *)(recvBuffer + IP_HEADER_END);
+				int type = recvBuffer[IP_HEADER_END];
 
-				DEBUG << "Buffer: " << recvBuffer << ENDL;
-				DEBUG << "ICMP code: " << recv_icmp->code << ENDL;
-				DEBUG << "ICMP check: " << recv_icmp->checksum << ENDL;
-				DEBUG << "ICMP buffer: " << recvBuffer[recv_ip->ihl * 4] << ENDL;
-				DEBUG << "Reply type: " << recv_icmp->type << ENDL;
-				// problem with the reply type being empty
+				DEBUG << "Reply type: " << type << ENDL;
 	
 				char ip_str[INET_ADDRSTRLEN];
 				inet_ntop(AF_INET, &(recv_ip->saddr), ip_str, INET_ADDRSTRLEN);
 								
 				DEBUG << "IP: " << ip_str << ENDL;
-				if (recv_icmp->type == ICMP_ECHOREPLY) {
-					std::cout << "Reply and answered!" << "\n";
+				if (type == ICMP_ECHOREPLY) {
+					std::cout << "Target has responded!" << "\n";
 					not_done_reading = false;
-				} else if (recv_icmp->type == ICMP_TIME_EXCEEDED) {
+					no_reply = false;
+				} else if (type == ICMP_TIME_EXCEEDED) {
 					std::cout << "Timeout received from " << ip_str << "\n";
 					not_done_reading = false;
 				}
