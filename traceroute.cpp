@@ -23,35 +23,19 @@ uint16_t checksum(unsigned short *buffer, int size) {
     return (unsigned short) (~sum);
 }
 
+// Returns true if IP string in command line args is valid
 bool isValidIpAddress(const char *ipAddress) {
 	struct sockaddr_in sa;
 	int result = inet_pton(AF_INET, ipAddress, &(sa.sin_addr));
 	return result != 0;
 }
 
-// struct iphdr* fill_in_IP_header(char *sendBuffer, int current_ttl, std::string destIP) {
-// // 3. Fill in all the fields of the IP header at the front of the buffer.
-// 	// a. You don’t need to fill in source IP or checksum
-// 	struct iphdr *ip = (struct iphdr *)sendBuffer;
-// 	ip->version = 4;
-// 	ip->ihl = 5;
-// 	ip->tos = 0;
-// 	ip->tot_len = htons(PACKET_SIZE);
-// 	ip->id = htons(0);
-// 	ip->frag_off = 0;
-// 	ip->ttl = htons(current_ttl);
-// 	ip->protocol = IPPROTO_ICMP;
-// 	ip->check = 0;
-// 	ip->daddr = inet_addr(destIP.c_str());
-// 	return ip;
-// }
-
+// Fill in fields of ICMP header
 struct icmphdr* fill_in_ICMP_header(char *sendBuffer) {
-// 4. Fill in all the fields of the ICMP header right behind the IP header.
 	struct icmphdr *icmp = (struct icmphdr *)(sendBuffer);
 	icmp->type = htons(ICMP_ECHO);
 	icmp->code = 0;
-	icmp->checksum = 0;
+	icmp->checksum = 0; // will calculate checksum after packet has been created
 	icmp->un.echo.id = htons(getpid() & 0xFFFF);
 	icmp->un.echo.sequence = htons(1);
 	return icmp;
@@ -87,7 +71,7 @@ int main (int argc, char *argv[]) {
 		return -1;
 	}
 
-// 5. Create the send and receive sockets.
+// Create the send and receive sockets.
 	int sendSock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 	if (sendSock < 0) {
 		DEBUG << "problem creating send socket" << ENDL;
@@ -102,26 +86,24 @@ int main (int argc, char *argv[]) {
 
 	int current_ttl = 2;
 	bool no_reply = true;
-// 6. while (CURRENT_TTL <= 31) and (reply-not-received)
+// While there is no reply and packet has TTL between 2-31
 	while (current_ttl <= 31 && no_reply) {
-	// 1. Allocate two 64 byte buffers. One for sending and one for receiving.
+	// Allocate two 64 byte buffers. One for sending and one for receiving.
 		char sendBuffer[PACKET_SIZE];
 		char recvBuffer[PACKET_SIZE];
 
-	// 2. Fill the whole buffer with a pattern of characters of your choice.
+	// Fill the whole buffer with a pattern of characters of your choice.
 		std::memset(sendBuffer, 'a', sizeof(sendBuffer));
-		std::memset(recvBuffer, 'a', sizeof(recvBuffer));
 
-	// a. Set the TTL in the IP header in the buffer to CURRENT_TTL
-		//struct iphdr *ip_header = fill_in_IP_header(sendBuffer, current_ttl, destIP);
 		struct icmphdr *icmp_header = fill_in_ICMP_header(sendBuffer);
-		*sendBuffer = 8; // ICMP header starts at the beginning of the buffer -> why don't I have control over the IP header?
-	// b. Set the checksum in the ICMP header
+		*sendBuffer = ICMP_ECHO; //don't ask
+	// Set the checksum in the ICMP header
 		icmp_header->checksum = checksum((unsigned short *)sendBuffer, PACKET_SIZE);
 
+	// Manually set TTL in IP header to current_ttl
 		setsockopt(sendSock, IPPROTO_IP, IP_TTL, &current_ttl, sizeof(current_ttl));
 
-	// c. Send the buffer using sendfrom()
+	// Send the buffer using sendto()
 		struct sockaddr_in destAddr{};
 		destAddr.sin_family = AF_INET;
 		destAddr.sin_addr.s_addr = inet_addr(destIP.c_str());
@@ -131,24 +113,26 @@ int main (int argc, char *argv[]) {
 			DEBUG << "send from socket failed" << ENDL;
 			return -1;
 		}
-	// d. While (now < START_TIME + 15) and (not-done-reading)
+
 		struct timeval start, now;
 		gettimeofday(&start, NULL);
 
 		DEBUG << "Trying packet with a TTL of: " << current_ttl << ENDL;
 
+		// While there is still data to be read, check time and wait on packet
 		bool not_done_reading = true;
 		while (not_done_reading) {
 			// calculate elapsed time
 			gettimeofday(&now, NULL);
 			double elapsed = (now.tv_sec - start.tv_sec) + (now.tv_usec - start.tv_usec) / 1e6;
 
+			// If elapsed time is > 15 sec, break from current iteration
 			if (elapsed >= 15.0) {
 				std::cout << "No response with a TTL of " << current_ttl << "\n";
 				break;
 			}
 
-		// i. Use select() to sleep for up to 5 seconds, wake up if data arrives.
+		// Use select() to sleep for up to 5 seconds, wake up if data arrives.
 			fd_set readfds;
 			FD_ZERO(&readfds);
 			FD_SET(recvSock, &readfds);
@@ -162,13 +146,13 @@ int main (int argc, char *argv[]) {
 					continue;
 			}
 
-		// ii. If data has arrived, read it with recvfrom()
+		// If data has arrived, read it with recvfrom()
 			struct sockaddr_in recvAddr[64];
 			socklen_t addrlen = sizeof(recvAddr);
 			ssize_t recv_bytes = recvfrom(recvSock, recvBuffer, sizeof(recvBuffer), 0, (struct sockaddr *)&recvAddr, &addrlen);
-			//recv buffer is not far enough back
 
 			DEBUG << "Data received " << recv_bytes << " bytes." << ENDL;
+
 			if (recv_bytes > 0) {
 				struct iphdr *recv_ip = (struct iphdr *)recvBuffer;
 				struct icmphdr *recv_icmp = (struct icmphdr *)(recvBuffer + IP_HEADER_END);
@@ -176,10 +160,12 @@ int main (int argc, char *argv[]) {
 
 				DEBUG << "Reply type: " << type << ENDL;
 	
+				// Format IP address back into a readable string
 				char ip_str[INET_ADDRSTRLEN];
 				inet_ntop(AF_INET, &(recv_ip->saddr), ip_str, INET_ADDRSTRLEN);
-								
 				DEBUG << "IP: " << ip_str << ENDL;
+
+				// If target responded, echo success and break, else print IP and go to next TTL
 				if (type == ICMP_ECHOREPLY) {
 					std::cout << "Target has responded!" << "\n";
 					not_done_reading = false;
@@ -196,6 +182,7 @@ int main (int argc, char *argv[]) {
 		current_ttl++;
 	}
 
+	// If all 30 packets had no reply, print and exit
 	if (no_reply) {
 		std::cout << "No reply from destination.\n";
 	}
